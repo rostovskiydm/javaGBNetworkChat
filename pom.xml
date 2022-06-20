@@ -61,7 +61,7 @@
                         <id>default-cli</id>
                         <configuration>
                             <mainClass>
-                                ru.gb.javafxnetworkchat.javafxnetworkchat/ru.gb.javafxnetworkchat.javafxnetworkchat.HelloApplication
+                                ru.gb.javafxnetworkchat.javafxnetworkchat/ru.gb.javafxnetworkchat.javafxnetworkchat.client.HelloApplication
                             </mainClass>
                             <launcher>app</launcher>
                             <jlinkZipName>app</jlinkZipName>
