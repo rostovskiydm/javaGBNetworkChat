@@ -117,4 +117,13 @@ public class ChatController {
     public ChatClient getClient() {
         return client;
     }
+
+    public void authTimeOutExit() {
+        final Alert alert = new Alert(Alert.AlertType.ERROR, "Время авторизации вышло! Перезапустите приложение!",
+                new ButtonType("OK", ButtonBar.ButtonData.OK_DONE));
+        alert.setTitle("AUTH TIMEOUT!");
+        alert.showAndWait();
+        client.sendMessage(Command.END);
+        System.exit(0);
+    }
 }

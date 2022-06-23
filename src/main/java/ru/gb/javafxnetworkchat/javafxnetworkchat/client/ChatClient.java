@@ -54,6 +54,10 @@ public class ChatClient {
                 Platform.runLater(() -> controller.showError(params[0]));
                 continue;
             }
+            if (command == END) {
+                Platform.runLater(controller::authTimeOutExit);
+                break;
+            }
         }
     }
 

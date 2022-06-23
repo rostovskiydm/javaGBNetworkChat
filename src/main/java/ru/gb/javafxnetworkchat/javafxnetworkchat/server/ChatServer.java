@@ -1,13 +1,13 @@
 package ru.gb.javafxnetworkchat.javafxnetworkchat.server;
 
+import ru.gb.javafxnetworkchat.javafxnetworkchat.Command;
+
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
-
-import ru.gb.javafxnetworkchat.javafxnetworkchat.Command;
 
 public class ChatServer {
 
@@ -34,6 +34,10 @@ public class ChatServer {
     public void subscribe(ClientHandler client) {
         clients.put(client.getNick(), client);
         broadcastClientsList();
+    }
+
+    public boolean isAuthenticated (ClientHandler client){
+        return clients.get(client.getNick()) != null;
     }
 
     public boolean isNickBusy(String nick) {

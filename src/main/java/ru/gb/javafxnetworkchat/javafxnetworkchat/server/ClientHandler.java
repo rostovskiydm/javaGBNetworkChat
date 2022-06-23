@@ -8,12 +8,15 @@ import java.io.IOException;
 import java.net.Socket;
 
 public class ClientHandler {
+    private static final int AUTH_TIMER = 12000;
     private Socket socket;
     private ChatServer server;
     private DataInputStream in;
     private DataOutputStream out;
     private String nick;
     private AuthService authService;
+
+    private boolean authTimeOutError = false;
 
     public ClientHandler(Socket socket, ChatServer server, AuthService authService) {
         try {
@@ -25,7 +28,9 @@ public class ClientHandler {
             new Thread(() -> {
                 try {
                     authenticate();
-                    readMessages();
+                    if (!authTimeOutError) {
+                        readMessages();
+                    }
                 } finally {
                     closeConnection();
                 }
@@ -36,11 +41,22 @@ public class ClientHandler {
     }
 
     private void authenticate() {
+        new Thread(() -> {
+            try {
+                Thread.sleep(AUTH_TIMER);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } finally {
+                authTimeOutError = !server.isAuthenticated(this);
+                if (authTimeOutError) {
+                    sendMessage(Command.END);
+                }
+            }
+        }).start();
         while (true) {
             try {
                 final String message = in.readUTF();
                 final Command command = Command.getCommand(message);
-
                 if (command == Command.AUTH) {
                     final String[] params = command.parse(message);
                     final String login = params[0];
@@ -59,6 +75,8 @@ public class ClientHandler {
                     } else {
                         sendMessage(Command.ERROR, "Неверные логин и пароль");
                     }
+                } else if (command == Command.END) {
+                    break;
                 }
             } catch (IOException e) {
                 e.printStackTrace();
