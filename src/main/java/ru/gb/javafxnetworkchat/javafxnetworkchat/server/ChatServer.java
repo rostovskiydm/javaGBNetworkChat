@@ -3,23 +3,26 @@ package ru.gb.javafxnetworkchat.javafxnetworkchat.server;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import ru.gb.javafxnetworkchat.javafxnetworkchat.Command;
 
 public class ChatServer {
 
-    private final List<ClientHandler> clients;
+    private final Map<String, ClientHandler> clients;
 
     public ChatServer() {
-        this.clients = new ArrayList<>();
+        this.clients = new HashMap<>();
     }
 
     public void run() {
         try (ServerSocket serverSocket = new ServerSocket(8189);
-             AuthService authService = new InMemoryAuthService() ) {
+             AuthService authService = new InMemoryAuthService()) {
             while (true) {
                 System.out.println("Ожидаю подключения...");
-                Socket socket = serverSocket.accept();
+                final Socket socket = serverSocket.accept();
                 new ClientHandler(socket, this, authService);
                 System.out.println("Клиент подключен");
             }
@@ -28,37 +31,40 @@ public class ChatServer {
         }
     }
 
-    public void broadcast(String message) {
-        for (ClientHandler client : clients) {
-            client.sendMessage(message);
-        }
-
-    }
     public void subscribe(ClientHandler client) {
-        clients.add(client);
+        clients.put(client.getNick(), client);
+        broadcastClientsList();
     }
 
     public boolean isNickBusy(String nick) {
-        for (ClientHandler client : clients) {
-            if (nick.equals(client.getNick())){
-                return true;
-            }
+        return clients.get(nick) != null;
+    }
+
+    private void broadcastClientsList() {
+        final String nicks = clients.values().stream()
+                .map(ClientHandler::getNick)
+                .collect(Collectors.joining(" "));
+        broadcast(Command.CLIENTS, nicks);
+    }
+
+    public void broadcast(Command command, String message) {
+        for (ClientHandler client : clients.values()) {
+            client.sendMessage(command, message);
         }
-        return false;
     }
 
     public void unsubscribe(ClientHandler client) {
-        clients.remove(client);
+        clients.remove(client.getNick());
+        broadcastClientsList();
     }
 
-    public void sendPrivateMessage(String message) {
-        String[] split = message.split("\\p{Blank}+");
-        String nick = split[1];
-        String privateMessage = split[2];
-        for (ClientHandler client : clients) {
-            if (client.getNick().equals(nick)){
-                client.sendMessage(client.getNick() + ": " + privateMessage);
-            }
+    public void sendPrivateMessage(ClientHandler from, String nickTo, String message) {
+        final ClientHandler clientTo = clients.get(nickTo);
+        if (clientTo == null) {
+            from.sendMessage(Command.ERROR, "Пользователь не авторизован!");
+            return;
         }
+        clientTo.sendMessage(Command.MESSAGE, "От " + from.getNick() + ": " + message);
+        from.sendMessage(Command.MESSAGE, "Участнику " + nickTo + ": " + message);
     }
 }

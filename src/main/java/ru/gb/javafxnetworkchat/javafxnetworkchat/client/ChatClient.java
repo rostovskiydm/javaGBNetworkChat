@@ -1,15 +1,21 @@
 package ru.gb.javafxnetworkchat.javafxnetworkchat.client;
 
+import javafx.application.Platform;
+import ru.gb.javafxnetworkchat.javafxnetworkchat.Command;
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
+
+import static ru.gb.javafxnetworkchat.javafxnetworkchat.Command.*;
 
 public class ChatClient {
 
     private Socket socket;
     private DataInputStream in;
     private DataOutputStream out;
+
     private final ChatController controller;
 
     public ChatClient(ChatController controller) {
@@ -35,33 +41,19 @@ public class ChatClient {
 
     private void waitAuth() throws IOException {
         while (true) {
-            String message = in.readUTF();
-            if (message.startsWith("/authok")) {
-                String[] split = message.split("\\p{Blank}+");
-                final String nick = split[1];
+            final String message = in.readUTF();
+            final Command command = getCommand(message);
+            final String[] params = command.parse(message);
+            if (command == AUTHOK) { // /authok nick1
+                final String nick = params[0];
                 controller.setAuth(true);
                 controller.addMessage("Успешная авторизация под ником " + nick);
                 break;
             }
-        }
-    }
-
-    private void readMessages() throws IOException {
-        while (true) {
-            String message = in.readUTF();
-            if ("/end".equals(message)) {
-                controller.setAuth(false);
-                break;
+            if (command == ERROR) {
+                Platform.runLater(() -> controller.showError(params[0]));
+                continue;
             }
-            controller.addMessage(message);
-        }
-    }
-
-    public void sendMessage(String message) {
-        try {
-            out.writeUTF(message);
-        } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 
@@ -79,7 +71,6 @@ public class ChatClient {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-
         }
         if (socket != null) {
             try {
@@ -88,5 +79,40 @@ public class ChatClient {
                 e.printStackTrace();
             }
         }
+    }
+
+    private void readMessages() throws IOException {
+        while (true) {
+            final String message = in.readUTF();
+            final Command command = getCommand(message);
+            if (END == command) {
+                controller.setAuth(false);
+                break;
+            }
+            final String[] params = command.parse(message);
+            if (ERROR == command) {
+                String messageError = params[0];
+                Platform.runLater(() -> controller.showError(messageError));
+                continue;
+            }
+            if (MESSAGE == command) {
+                Platform.runLater(() -> controller.addMessage(params[0]));
+            }
+            if (CLIENTS == command) {
+                Platform.runLater(() -> controller.updateClientsList(params));
+            }
+        }
+    }
+
+    private void sendMessage(String message) {
+        try {
+            out.writeUTF(message);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void sendMessage(Command command, String... params) {
+        sendMessage(command.collectMessage(params));
     }
 }

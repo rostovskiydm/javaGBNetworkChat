@@ -1,5 +1,7 @@
 package ru.gb.javafxnetworkchat.javafxnetworkchat.server;
 
+import ru.gb.javafxnetworkchat.javafxnetworkchat.Command;
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -7,17 +9,17 @@ import java.net.Socket;
 
 public class ClientHandler {
     private Socket socket;
+    private ChatServer server;
     private DataInputStream in;
     private DataOutputStream out;
-    private ChatServer server;
     private String nick;
     private AuthService authService;
 
     public ClientHandler(Socket socket, ChatServer server, AuthService authService) {
         try {
-            this.authService = authService;
-            this.server = server;
             this.socket = socket;
+            this.server = server;
+            this.authService = authService;
             this.in = new DataInputStream(socket.getInputStream());
             this.out = new DataOutputStream(socket.getOutputStream());
             new Thread(() -> {
@@ -33,66 +35,43 @@ public class ClientHandler {
         }
     }
 
-    private void authenticate() { // auth login1 pass1
+    private void authenticate() {
         while (true) {
             try {
-                String message = in.readUTF();
-                if (message.startsWith("/auth")) {
-                    String[] split = message.split("\\p{Blank}+");
-                    String login = split[1];
-                    String password = split[2];
-                    String nick = authService.getNickByLoginAndPassword(login, password);
+                final String message = in.readUTF();
+                final Command command = Command.getCommand(message);
+
+                if (command == Command.AUTH) {
+                    final String[] params = command.parse(message);
+                    final String login = params[0];
+                    final String password = params[1];
+                    final String nick = authService.getNickByLoginAndPassword(login, password);
                     if (nick != null) {
                         if (server.isNickBusy(nick)) {
-                            sendMessage("Такой пользователь уже авторизован");
+                            sendMessage(Command.ERROR, "Пользователь уже авторизован");
                             continue;
                         }
-                        sendMessage("/authok " + nick);
+                        sendMessage(Command.AUTHOK, nick);
                         this.nick = nick;
-                        server.broadcast("Пользователь " + nick + " зашёл в чат");
+                        server.broadcast(Command.MESSAGE, "Пользователь " + nick + " зашел в чат");
                         server.subscribe(this);
                         break;
                     } else {
-                        sendMessage("Наверные логи или пароль");
+                        sendMessage(Command.ERROR, "Неверные логин и пароль");
                     }
-
                 }
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
-
     }
 
-    private void readMessages() {
-        while (true) {
-            try {
-                String message = in.readUTF();
-                if ("/end".equals(message)) {
-                    break;
-                }
-                if (message.startsWith("/w")) {
-                    server.sendPrivateMessage(message);
-                } else {
-                    server.broadcast(nick + ": " + message);
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-    }
-
-    public void sendMessage(String message) {
-        try {
-            out.writeUTF(message);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    public void sendMessage(Command command, String... params) {
+        sendMessage(command.collectMessage(params));
     }
 
     private void closeConnection() {
-        sendMessage("/end");
+        sendMessage(Command.END);
         if (in != null) {
             try {
                 in.close();
@@ -106,12 +85,39 @@ public class ClientHandler {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-
         }
         if (socket != null) {
             server.unsubscribe(this);
             try {
                 socket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void sendMessage(String message) {
+        try {
+            out.writeUTF(message);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void readMessages() {
+        while (true) {
+            try {
+                final String message = in.readUTF();
+                final Command command = Command.getCommand(message);
+                if (command == Command.END) {
+                    break;
+                }
+                if (command == Command.PRIVATE_MESSAGE) {
+                    final String[] params = command.parse(message);
+                    server.sendPrivateMessage(this, params[0], params[1]);
+                    continue;
+                }
+                server.broadcast(Command.MESSAGE, nick + ": " + command.parse(message)[0]);
             } catch (IOException e) {
                 e.printStackTrace();
             }
